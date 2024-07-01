@@ -1,17 +1,46 @@
 version: '3'
 services:
-  service:
-    build: app
+  django:
+    build:
+      dockerfile: Dockerfile
+      context: ./app
+    depends_on:
+      - db
+    volumes:
+      - static_volume:/app/static
+      - media_volume:/app/media
+    env_file:
+      - .env
+    command: >
+      bash -c "python manage.py collectstatic --noinput &&
+               python manage.py migrate &&
+               uwsgi --ini /app/uwsgi/uwsgi.ini --socket :8000"
     expose:
-      - "8000"
+      - 8000
 
   nginx:
-    image: nginx:latest
+    build:
+      dockerfile: ./Dockerfile
+      context: ./configs
+    container_name: app_nginx
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./configs:/etc/nginx/conf.d:ro
-      - ./data:/data/:ro
+      - static_volume:/app/static
+      - media_volume:/app/media
     depends_on:
-      - service
+      - django
     ports:
-      - "80:80"
+      - "${NGINX_EXTERNAL_PORT}:80"
+
+  db:
+    image: postgres:16
+    container_name: app_postgres
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  static_volume:
+  media_volume:
+  postgres_data:
